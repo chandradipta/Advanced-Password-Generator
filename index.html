@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ultimate Password Generator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet"/>
+  <style>
+    body {
+      background-color: #121212;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    .container {
+      background-color: #1e1e1e;
+      padding: 30px;
+      border-radius: 12px;
+      max-width: 450px;
+      width: 100%;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    .progress {
+      height: 10px;
+    }
+    .input-group-text {
+      cursor: pointer;
+    }
+    .form-check {
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h3 class="text-center mb-3"><i class="bi bi-shield-lock-fill"></i> Advanced Password Generator</h3>
+
+    <div class="mb-3">
+      <label for="length" class="form-label">Password Length</label>
+      <input type="number" class="form-control" id="length" value="16" min="4" max="64">
+    </div>
+
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="uppercase" checked><label class="form-check-label" for="uppercase">Include Uppercase</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="lowercase" checked><label class="form-check-label" for="lowercase">Include Lowercase</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="numbers" checked><label class="form-check-label" for="numbers">Include Numbers</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="symbols" checked><label class="form-check-label" for="symbols">Include Symbols</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="noSimilar"><label class="form-check-label" for="noSimilar">Avoid Similar Characters (l, 1, I, O, 0)</label></div>
+    <div class="form-check"><input class="form-check-input" type="checkbox" id="noAmbiguous"><label class="form-check-label" for="noAmbiguous">Avoid Ambiguous Characters ({ } [ ] / \ etc.)</label></div>
+    <div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="noRepeat"><label class="form-check-label" for="noRepeat">No Repeating Characters</label></div>
+
+    <button class="btn btn-primary w-100 mb-3" id="generate"><i class="bi bi-lightning-charge"></i> Generate Password</button>
+
+    <div class="input-group mb-2">
+      <input type="text" id="result" class="form-control" readonly placeholder="Your password">
+      <span class="input-group-text" id="toggleVisibility"><i class="bi bi-eye-slash"></i></span>
+      <span class="input-group-text" id="copy"><i class="bi bi-clipboard"></i></span>
+    </div>
+
+    <div class="d-flex justify-content-between mb-1">
+      <span>Strength:</span><span id="strengthLabel">-</span>
+    </div>
+    <div class="progress mb-3"><div id="strengthBar" class="progress-bar" style="width: 0%;"></div></div>
+
+    <button class="btn btn-success w-100" id="save"><i class="bi bi-download"></i> Save Password</button>
+  </div>
+
+  <script>
+    const lengthEl = document.getElementById('length');
+    const uppercaseEl = document.getElementById('uppercase');
+    const lowercaseEl = document.getElementById('lowercase');
+    const numbersEl = document.getElementById('numbers');
+    const symbolsEl = document.getElementById('symbols');
+    const noSimilarEl = document.getElementById('noSimilar');
+    const noAmbiguousEl = document.getElementById('noAmbiguous');
+    const noRepeatEl = document.getElementById('noRepeat');
+    const resultEl = document.getElementById('result');
+    const generateBtn = document.getElementById('generate');
+    const copyBtn = document.getElementById('copy');
+    const saveBtn = document.getElementById('save');
+    const toggleBtn = document.getElementById('toggleVisibility');
+    const strengthBar = document.getElementById('strengthBar');
+    const strengthLabel = document.getElementById('strengthLabel');
+
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const lower = 'abcdefghijklmnopqrstuvwxyz';
+    const number = '0123456789';
+    const symbol = '!@#$%^&*()_+[]{}<>?/\\|~`-=:;,."';
+    const similar = 'il1LoO0';
+    const ambiguous = '{}[]()/\\\'"`~,;:.<>';
+
+    generateBtn.addEventListener('click', () => {
+      const password = generatePassword();
+      resultEl.value = password;
+      updateStrength(password);
+    });
+
+    copyBtn.addEventListener('click', () => {
+      if (!resultEl.value) return;
+      navigator.clipboard.writeText(resultEl.value);
+      copyBtn.innerHTML = '<i class="bi bi-check2-circle"></i>';
+      setTimeout(() => copyBtn.innerHTML = '<i class="bi bi-clipboard"></i>', 1500);
+    });
+
+    toggleBtn.addEventListener('click', () => {
+      resultEl.type = resultEl.type === 'password' ? 'text' : 'password';
+      toggleBtn.innerHTML = `<i class="bi ${resultEl.type === 'password' ? 'bi-eye-slash' : 'bi-eye'}"></i>`;
+    });
+
+    saveBtn.addEventListener('click', () => {
+      if (!resultEl.value) return;
+      const blob = new Blob([resultEl.value], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "password.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    function generatePassword() {
+      const length = +lengthEl.value;
+      let charPool = '';
+      let guaranteed = [];
+
+      if (uppercaseEl.checked) {
+        charPool += upper;
+        guaranteed.push(randomChar(upper));
+      }
+      if (lowercaseEl.checked) {
+        charPool += lower;
+        guaranteed.push(randomChar(lower));
+      }
+      if (numbersEl.checked) {
+        charPool += number;
+        guaranteed.push(randomChar(number));
+      }
+      if (symbolsEl.checked) {
+        charPool += symbol;
+        guaranteed.push(randomChar(symbol));
+      }
+
+      if (noSimilarEl.checked) {
+        charPool = charPool.split('').filter(c => !similar.includes(c)).join('');
+      }
+
+      if (noAmbiguousEl.checked) {
+        charPool = charPool.split('').filter(c => !ambiguous.includes(c)).join('');
+      }
+
+      if (!charPool || length < guaranteed.length) return '';
+
+      let remaining = [];
+      while (remaining.length < length - guaranteed.length) {
+        let char = randomChar(charPool);
+        if (noRepeatEl.checked && (guaranteed.includes(char) || remaining.includes(char))) continue;
+        remaining.push(char);
+      }
+
+      const finalPassword = shuffle([...guaranteed, ...remaining]).join('');
+      return finalPassword;
+    }
+
+    function randomChar(set) {
+      return set[Math.floor(Math.random() * set.length)];
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function updateStrength(password) {
+      let score = 0;
+      if (password.length >= 8) score += 20;
+      if (password.length >= 12) score += 20;
+      if (/[A-Z]/.test(password)) score += 20;
+      if (/[a-z]/.test(password)) score += 15;
+      if (/[0-9]/.test(password)) score += 15;
+      if (/[^A-Za-z0-9]/.test(password)) score += 10;
+
+      strengthBar.style.width = score + '%';
+      strengthBar.className = 'progress-bar';
+
+      if (score < 40) {
+        strengthBar.classList.add('bg-danger');
+        strengthLabel.textContent = 'Weak';
+      } else if (score < 70) {
+        strengthBar.classList.add('bg-warning');
+        strengthLabel.textContent = 'Medium';
+      } else {
+        strengthBar.classList.add('bg-success');
+        strengthLabel.textContent = 'Strong';
+      }
+    }
+  </script>
+</body>
+</html>
